@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Aether Pulse</title>
+  <!-- Telegram Web App SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #05040a;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #fff;
+    }
+    #gameContainer {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    /* HUD интерфейс */
+    #hud {
+      position: absolute;
+      top: env(safe-area-inset-top, 15px);
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 18px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .hud-group {
+      display: flex;
+      gap: 10px;
+    }
+    .hud-box {
+      background: rgba(12, 10, 26, 0.65);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 242, 254, 0.25);
+      padding: 6px 14px;
+      border-radius: 14px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), inset 0 0 10px rgba(0, 242, 254, 0.05);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      color: #8b93be;
+      font-weight: 600;
+    }
+    .value {
+      font-size: 18px;
+      font-weight: 800;
+      color: #00f2fe;
+      text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+    }
+    .combo-box .value {
+      color: #ff007f;
+      text-shadow: 0 0 10px rgba(255, 0, 127, 0.6);
+    }
+    .hud-btn {
+      pointer-events: auto;
+      background: rgba(12, 10, 26, 0.65);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 242, 254, 0.3);
+      border-radius: 12px;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #00f2fe;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .hud-btn:active {
+      transform: scale(0.9);
+      background: rgba(0, 242, 254, 0.2);
+    }
+
+    /* Зоны управления на телефоне (снизу экрана) */
+    #touchControls {
+      position: absolute;
+      bottom: env(safe-area-inset-bottom, 20px);
+      left: 0;
+      width: 100%;
+      height: 130px;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 20px;
+      pointer-events: none;
+      z-index: 15;
+    }
+    .control-btn {
+      pointer-events: auto;
+      width: 120px;
+      height: 90px;
+      background: rgba(12, 10, 26, 0.5);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(0, 242, 254, 0.3);
+      border-radius: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #00f2fe;
+      font-size: 28px;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5), inset 0 0 15px rgba(0, 242, 254, 0.1);
+      transition: transform 0.1s ease, background 0.1s ease;
+    }
+    .control-btn span {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-top: 4px;
+      color: #8b93be;
+    }
+    .control-btn:active {
+      transform: scale(0.92);
+      background: rgba(0, 242, 254, 0.25);
+      border-color: rgba(0, 242, 254, 0.8);
+      color: #ffffff;
+    }
+    .control-btn:active span {
+      color: #00f2fe;
+    }
+
+    /* Индикатор щита и магнита */
+    #statusBadges {
+      position: absolute;
+      top: calc(env(safe-area-inset-top, 15px) + 65px);
+      left: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      backdrop-filter: blur(8px);
+      animation: fadeIn 0.3s ease;
+    }
+    .badge-shield {
+      background: rgba(186, 85, 211, 0.25);
+      border: 1px solid rgba(186, 85, 211, 0.6);
+      color: #e0b0ff;
+      box-shadow: 0 0 10px rgba(186, 85, 211, 0.3);
+    }
+    .badge-magnet {
+      background: rgba(255, 215, 0, 0.25);
+      border: 1px solid rgba(255, 215, 0, 0.6);
+      color: #ffd700;
+      box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+    }
+
+    /* Экраны Overlay */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(5, 4, 10, 0.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+      z-index: 20;
+      opacity: 1;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+    .overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(1.05);
+    }
+    
+    .title-glow {
+      font-size: 36px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      margin-bottom: 6px;
+      background: linear-gradient(135deg, #00f2fe 0%, #4facfe 50%, #00c6ff 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 18px rgba(0, 242, 254, 0.5));
+      text-align: center;
+    }
+    .subtitle {
+      color: #9aa0c4;
+      margin-bottom: 30px;
+      font-size: 14px;
+      text-align: center;
+      max-width: 280px;
+      line-height: 1.4;
+    }
+
+    /* Карточка статистики */
+    .stats-card {
+      background: rgba(18, 15, 38, 0.6);
+      border: 1px solid rgba(0, 242, 254, 0.2);
+      border-radius: 20px;
+      padding: 16px 24px;
+      width: 100%;
+      max-width: 290px;
+      margin-bottom: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: #7e84a8;
+    }
+    .stat-val {
+      font-size: 16px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Кнопки */
+    .btn-main {
+      background: linear-gradient(135deg, #00f2fe 0%, #0066ff 100%);
+      border: none;
+      padding: 16px 42px;
+      border-radius: 30px;
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 16px;
+      letter-spacing: 1px;
+      cursor: pointer;
+      box-shadow: 0 0 25px rgba(0, 242, 254, 0.4), 0 6px 20px rgba(0, 102, 255, 0.4);
+      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .btn-main:active {
+      transform: scale(0.94);
+      box-shadow: 0 0 12px rgba(0, 242, 254, 0.4);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="gameContainer">
+    <!-- HUD Panel -->
+    <div id="hud">
+      <div class="hud-group">
+        <div class="hud-box">
+          <div class="label">Счёт</div>
+          <div class="value" id="score">0</div>
+        </div>
+        <div class="hud-box combo-box">
+          <div class="label">Комбо</div>
+          <div class="value" id="combo">x1</div>
+        </div>
+      </div>
+      <div class="hud-group">
+        <div class="hud-box">
+          <div class="label">Рекорд</div>
+          <div class="value" id="highScore">0</div>
+        </div>
+        <button class="hud-btn" id="soundBtn" aria-label="Mute/Unmute">🔊</button>
+      </div>
+    </div>
+
+    <!-- Active Badges -->
+    <div id="statusBadges">
+      <div id="shieldBadge" class="badge badge-shield" style="display: none;">
+        <span>🛡️ ЩИТ АКТИВЕН</span>
+      </div>
+      <div id="magnetBadge" class="badge badge-magnet" style="display: none;">
+        <span>🧲 МАГНИТ</span>
+      </div>
+    </div>
+
+    <!-- Кнопки управления внизу экрана -->
+    <div id="touchControls">
+      <button class="control-btn" id="btnLeft">
+        ◀
+        <span>ВЛЕВО</span>
+      </button>
+      <button class="control-btn" id="btnRight">
+        ▶
+        <span>ВПРАВО</span>
+      </button>
+    </div>
+
+    <!-- Overlay Screen -->
+    <div id="overlay" class="overlay">
+      <h1 id="title" class="title-glow">AETHER PULSE</h1>
+      <p id="subtitle" class="subtitle">Используй кнопки внизу для маневрирования импульсом ядра</p>
+      
+      <div id="statsCard" class="stats-card" style="display: none;">
+        <div class="stat-row">
+          <span class="stat-label">Счёт за раунд</span>
+          <span class="stat-val" id="resScore" style="color:#00f2fe;">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Макс. Комбо</span>
+          <span class="stat-val" id="resCombo" style="color:#ff007f;">x1</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Собрано сфер</span>
+          <span class="stat-val" id="resCollected">0</span>
+        </div>
+      </div>
+
+      <button id="startBtn" class="btn-main">НАЧАТЬ</button>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+  </div>
+
+  <script>
+    class SoundFX {
+      constructor() {
+        this.ctx = null;
+        this.muted = false;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      playJump() {
+        if (this.muted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(260, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(540, this.ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.08);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.08);
+      }
+      playCollectCyan() {
+        if (this.muted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(520, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, this.ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.12);
+      }
+      playCollectGold() {
+        if (this.muted || !this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, now);
+        osc.frequency.setValueAtTime(880, now + 0.08);
+        osc.frequency.setValueAtTime(1174.66, now + 0.16);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(now + 0.3);
+      }
+      playShield() {
+        if (this.muted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(600, this.ctx.currentTime + 0.25);
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.25);
+      }
+      playExplode() {
+        if (this.muted || !this.ctx) return;
+        const bufferSize = this.ctx.sampleRate * 0.3;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(800, this.ctx.currentTime);
+        filter.frequency.linearRampToValueAtTime(50, this.ctx.currentTime + 0.3);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start();
+        noise.stop(this.ctx.currentTime + 0.3);
+      }
+    }
+
+    const tg = window.Telegram?.WebApp;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      if (tg.enableClosingConfirmation) tg.enableClosingConfirmation();
+    }
+
+    const sfx = new SoundFX();
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let width = 0, height = 0, dpr = 1;
+
+    function resize() {
+      dpr = window.devicePixelRatio || 1;
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+      ctx.scale(dpr, dpr);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    let isPlaying = false;
+    let score = 0;
+    let combo = 1;
+    let maxCombo = 1;
+    let spheresCollected = 0;
+    let highScore = 0;
+    let shakeTime = 0;
+    let shakeIntensity = 0;
+
+    function loadHighScore() {
+      if (tg?.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9')) {
+        try {
+          tg.CloudStorage.getItem('ap_highscore', (err, val) => {
+            if (!err && val) {
+              highScore = parseInt(val, 10) || 0;
+              document.getElementById('highScore').innerText = highScore;
+            } else {
+              fallbackLocalStorage();
+            }
+          });
+        } catch (e) {
+          fallbackLocalStorage();
+        }
+      } else {
+        fallbackLocalStorage();
+      }
+    }
+
+    function fallbackLocalStorage() {
+      try {
+        highScore = parseInt(localStorage.getItem('ap_highscore') || '0', 10);
+      } catch (e) {
+        highScore = 0;
+      }
+      document.getElementById('highScore').innerText = highScore;
+    }
+
+    function saveHighScore(newScore) {
+      highScore = newScore;
+      document.getElementById('highScore').innerText = highScore;
+      if (tg?.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9')) {
+        try {
+          tg.CloudStorage.setItem('ap_highscore', newScore.toString());
+        } catch (e) {
+          try { localStorage.setItem('ap_highscore', newScore.toString()); } catch (err) {}
+        }
+      } else {
+        try { localStorage.setItem('ap_highscore', newScore.toString()); } catch (err) {}
+      }
+    }
+
+    loadHighScore();
+
+    const player = {
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      radius: 16,
+      gravity: 0.38,
+      jump: -7.8,
+      sideAccel: 4.2,
+      pulse: 0,
+      hasShield: false,
+      magnetTimer: 0
+    };
+
+    let particles = [];
+    let targets = [];
+    let floatingTexts = [];
+    let spawnTimer = 0;
+
+    class FloatingText {
+      constructor(x, y, text, color) {
+        this.x = x;
+        this.y = y;
+        this.text = text;
+        this.color = color;
+        this.alpha = 1;
+        this.vy = -1.5;
+      }
+      update() {
+        this.y += this.vy;
+        this.alpha -= 0.025;
+      }
+      draw() {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.alpha);
+        ctx.font = '700 14px -apple-system, sans-serif';
+        ctx.fillStyle = this.color;
+        ctx.textAlign = 'center';
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = this.color;
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.restore();
+      }
+    }
+
+    class Particle {
+      constructor(x, y, color, speedMult = 1, size = 3) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.radius = Math.random() * size + 1;
+        this.vx = (Math.random() - 0.5) * 6 * speedMult;
+        this.vy = (Math.random() - 0.5) * 6 * speedMult;
+        this.alpha = 1;
+        this.decay = Math.random() * 0.025 + 0.015;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.alpha -= this.decay;
+      }
+      draw() {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.alpha);
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = this.color;
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    class Target {
+      constructor() {
+        this.x = Math.random() * (width - 80) + 40;
+        this.y = Math.random() * (height - 300) + 120;
+        this.vx = (Math.random() - 0.5) * 1.5;
+        this.vy = (Math.random() - 0.5) * 0.8;
+        this.pulse = Math.random() * Math.PI;
+        this.life = 320;
+
+        const rand = Math.random();
+        if (rand < 0.55) {
+          this.type = 0;
+          this.color = '#00f2fe';
+          this.radius = 14;
+        } else if (rand < 0.80) {
+          this.type = 1;
+          this.color = '#ff2a6d';
+          this.radius = 15;
+        } else if (rand < 0.92) {
+          this.type = 2;
+          this.color = '#ffd700';
+          this.radius = 16;
+        } else {
+          this.type = 3;
+          this.color = '#ba55d3';
+          this.radius = 15;
+        }
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.x - this.radius < 10 || this.x + this.radius > width - 10) this.vx *= -1;
+        if (this.y - this.radius < 60 || this.y + this.radius > height - 160) this.vy *= -1;
+
+        if (player.magnetTimer > 0 && this.type !== 1) {
+          const dx = player.x - this.x;
+          const dy = player.y - this.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 220) {
+            this.x += (dx / dist) * 5.5;
+            this.y += (dy / dist) * 5.5;
+          }
+        }
+
+        this.pulse += 0.06;
+        this.life--;
+      }
+      draw() {
+        const curR = this.radius + Math.sin(this.pulse) * 2;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, Math.max(0, curR), 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.shadowBlur = 16;
+        ctx.shadowColor = this.color;
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '10px -apple-system, sans-serif';
+        if (this.type === 2) ctx.fillText('★', this.x, this.y + 1);
+        else if (this.type === 3) ctx.fillText('🛡', this.x, this.y);
+        else if (this.type === 1) ctx.fillText('✕', this.x, this.y);
+
+        ctx.restore();
+      }
+    }
+
+    function triggerShake(intensity = 10, duration = 15) {
+      shakeIntensity = intensity;
+      shakeTime = duration;
+    }
+
+    function resetGame() {
+      player.x = width / 2;
+      player.y = height / 2 - 50;
+      player.vx = 0;
+      player.vy = 0;
+      player.hasShield = false;
+      player.magnetTimer = 0;
+      score = 0;
+      combo = 1;
+      maxCombo = 1;
+      spheresCollected = 0;
+      particles = [];
+      targets = [];
+      floatingTexts = [];
+      
+      updateUI();
+    }
+
+    function updateUI() {
+      document.getElementById('score').innerText = score;
+      document.getElementById('combo').innerText = `x${combo}`;
+      document.getElementById('shieldBadge').style.display = player.hasShield ? 'flex' : 'none';
+      document.getElementById('magnetBadge').style.display = player.magnetTimer > 0 ? 'flex' : 'none';
+    }
+
+    function createExplosion(x, y, color, count = 25, speed = 1.5) {
+      for (let i = 0; i < count; i++) {
+        particles.push(new Particle(x, y, color, speed, 3.5));
+      }
+    }
+
+    function gameOver() {
+      isPlaying = false;
+      sfx.playExplode();
+      triggerShake(18, 25);
+
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.notificationOccurred('error');
+      }
+
+      if (score > highScore) {
+        saveHighScore(score);
+      }
+
+      document.getElementById('title').innerText = "ЯДРО РАЗРУШЕНО";
+      document.getElementById('subtitle').innerText = "Опасная энергия уничтожила импульс";
+      document.getElementById('resScore').innerText = score;
+      document.getElementById('resCombo').innerText = `x${maxCombo}`;
+      document.getElementById('resCollected').innerText = spheresCollected;
+      document.getElementById('statsCard').style.display = 'flex';
+      document.getElementById('startBtn').innerText = "ИГРАТЬ СНОВА";
+      document.getElementById('overlay').classList.remove('hidden');
+    }
+
+    // Управление по направлениям (1 = влево, -1 = вправо)
+    function movePlayer(direction) {
+      if (!isPlaying) return;
+
+      sfx.playJump();
+      
+      player.vy = player.jump;
+      player.vx = direction * player.sideAccel;
+
+      if (tg?.HapticFeedback) {
+        tg.HapticFeedback.impactOccurred('light');
+      }
+
+      for (let i = 0; i < 6; i++) {
+        particles.push(new Particle(player.x, player.y + player.radius, '#00f2fe', 0.6, 2.5));
+      }
+    }
+
+    // Кнопки управления (исправлено: левая кнопка двигает влево, правая — вправо)
+    document.getElementById('btnLeft').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      sfx.init();
+      movePlayer(1); // Влево
+    }, { passive: false });
+
+    document.getElementById('btnRight').addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      sfx.init();
+      movePlayer(-1); // Вправо
+    }, { passive: false });
+
+    document.getElementById('btnLeft').addEventListener('click', () => {
+      sfx.init();
+      movePlayer(1);
+    });
+
+    document.getElementById('btnRight').addEventListener('click', () => {
+      sfx.init();
+      movePlayer(-1);
+    });
+
+    // Клавиатура для тестирования на ПК
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp') {
+        sfx.init();
+        movePlayer(Math.random() > 0.5 ? 1 : -1);
+      } else if (e.code === 'ArrowLeft') {
+        sfx.init();
+        movePlayer(1);
+      } else if (e.code === 'ArrowRight') {
+        sfx.init();
+        movePlayer(-1);
+      }
+    });
+
+    document.getElementById('soundBtn').addEventListener('click', () => {
+      sfx.muted = !sfx.muted;
+      document.getElementById('soundBtn').innerText = sfx.muted ? '🔇' : '🔊';
+    });
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      sfx.init();
+      resetGame();
+      isPlaying = true;
+      document.getElementById('overlay').classList.add('hidden');
+    });
+
+    function loop() {
+      ctx.save();
+
+      if (shakeTime > 0) {
+        const dx = (Math.random() - 0.5) * shakeIntensity;
+        const dy = (Math.random() - 0.5) * shakeIntensity;
+        ctx.translate(dx, dy);
+        shakeTime--;
+      }
+
+      ctx.fillStyle = 'rgba(5, 4, 10, 0.32)';
+      ctx.fillRect(0, 0, width, height);
+
+      if (isPlaying) {
+        if (player.magnetTimer > 0) {
+          player.magnetTimer--;
+          if (player.magnetTimer === 0) updateUI();
+        }
+
+        player.vy += player.gravity;
+        player.x += player.vx;
+        player.y += player.vy;
+        player.vx *= 0.95;
+        player.pulse += 0.09;
+
+        particles.push(new Particle(player.x, player.y, player.hasShield ? '#ba55d3' : '#4facfe', 0.25, 2));
+
+        if (player.x - player.radius < 0) {
+          player.x = player.radius;
+          player.vx *= -0.6;
+        }
+        if (player.x + player.radius > width) {
+          player.x = width - player.radius;
+          player.vx *= -0.6;
+        }
+
+        if (player.y + player.radius > height - 120 || player.y - player.radius < 0) {
+          if (player.hasShield) {
+            player.hasShield = false;
+            player.vy = -player.vy * 0.8;
+            player.y = Math.max(player.radius + 5, Math.min(height - 140, player.y));
+            sfx.playExplode();
+            triggerShake(12, 15);
+            createExplosion(player.x, player.y, '#ba55d3', 25);
+            updateUI();
+          } else {
+            createExplosion(player.x, player.y, '#00f2fe', 35);
+            gameOver();
+          }
+        }
+
+        spawnTimer++;
+        if (spawnTimer % 38 === 0) {
+          if (targets.length < 12) {
+            targets.push(new Target());
+          }
+        }
+
+        for (let i = targets.length - 1; i >= 0; i--) {
+          const t = targets[i];
+          t.update();
+          t.draw();
+
+          const dx = player.x - t.x;
+          const dy = player.y - t.y;
+          const dist = Math.hypot(dx, dy);
+
+          if (dist < player.radius + t.radius) {
+            if (t.type === 1) {
+              if (player.hasShield) {
+                player.hasShield = false;
+                createExplosion(t.x, t.y, '#ba55d3', 30);
+                sfx.playExplode();
+                triggerShake(10, 12);
+                floatingTexts.push(new FloatingText(t.x, t.y, 'ЩИТ СБИТ!', '#ba55d3'));
+                targets.splice(i, 1);
+                updateUI();
+              } else {
+                createExplosion(t.x, t.y, '#ff2a6d', 45);
+                gameOver();
+              }
+            } else {
+              spheresCollected++;
+              let addedScore = 10;
+              let txtColor = '#00f2fe';
+
+              if (t.type === 0) {
+                sfx.playCollectCyan();
+                createExplosion(t.x, t.y, '#00f2fe', 15);
+                combo++;
+              } else if (t.type === 2) {
+                sfx.playCollectGold();
+                createExplosion(t.x, t.y, '#ffd700', 25);
+                addedScore = 50;
+                player.magnetTimer = 300;
+                combo += 2;
+                txtColor = '#ffd700';
+                floatingTexts.push(new FloatingText(t.x, t.y - 15, '🧲 МАГНИТ!', '#ffd700'));
+              } else if (t.type === 3) {
+                sfx.playShield();
+                createExplosion(t.x, t.y, '#ba55d3', 25);
+                player.hasShield = true;
+                combo++;
+                txtColor = '#ba55d3';
+                floatingTexts.push(new FloatingText(t.x, t.y - 15, '🛡️ ЩИТ!', '#ba55d3'));
+              }
+
+              if (combo > maxCombo) maxCombo = combo;
+              const totalGain = addedScore * combo;
+              score += totalGain;
+
+              floatingTexts.push(new FloatingText(t.x, t.y, `+${totalGain}`, txtColor));
+
+              if (tg?.HapticFeedback) {
+                tg.HapticFeedback.impactOccurred(t.type === 2 ? 'medium' : 'light');
+              }
+
+              targets.splice(i, 1);
+              updateUI();
+            }
+            continue;
+          }
+
+          if (t.life <= 0) {
+            targets.splice(i, 1);
+          }
+        }
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.update();
+        p.draw();
+        if (p.alpha <= 0) particles.splice(i, 1);
+      }
+
+      for (let i = floatingTexts.length - 1; i >= 0; i--) {
+        const ft = floatingTexts[i];
+        ft.update();
+        ft.draw();
+        if (ft.alpha <= 0) floatingTexts.splice(i, 1);
+      }
+
+      if (isPlaying) {
+        ctx.save();
+        ctx.beginPath();
+        const r = player.radius + Math.sin(player.pulse) * 2;
+        ctx.arc(player.x, player.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowBlur = 22;
+        ctx.shadowColor = player.hasShield ? '#ba55d3' : '#00f2fe';
+        ctx.fill();
+
+        if (player.hasShield) {
+          ctx.beginPath();
+          ctx.arc(player.x, player.y, r + 7, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(186, 85, 211, 0.8)';
+          ctx.lineWidth = 2;
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = '#ba55d3';
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      }
+
+      ctx.restore();
+      requestAnimationFrame(loop);
+    }
+
+    loop();
+  </script>
+</body>
+</html>
