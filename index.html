@@ -6,6 +6,8 @@
   <title>Aether Pulse</title>
   <!-- Telegram Web App SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Adsgram SDK -->
+  <script src="https://sad.adsgram.ai/js/sad.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -101,7 +103,7 @@
       background: rgba(0, 242, 254, 0.2);
     }
 
-    /* Зоны управления на телефоне (снизу экрана) */
+    /* Зоны управления на телефоне */
     #touchControls {
       position: absolute;
       bottom: env(safe-area-inset-bottom, 20px);
@@ -145,11 +147,8 @@
       border-color: rgba(0, 242, 254, 0.8);
       color: #ffffff;
     }
-    .control-btn:active span {
-      color: #00f2fe;
-    }
 
-    /* Индикатор щита и магнита */
+    /* Индикаторы */
     #statusBadges {
       position: absolute;
       top: calc(env(safe-area-inset-top, 15px) + 65px);
@@ -185,7 +184,7 @@
       box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
     }
 
-    /* Экраны Overlay */
+    /* Overlay Screens */
     .overlay {
       position: absolute;
       top: 0;
@@ -223,14 +222,13 @@
     }
     .subtitle {
       color: #9aa0c4;
-      margin-bottom: 30px;
+      margin-bottom: 24px;
       font-size: 14px;
       text-align: center;
       max-width: 280px;
       line-height: 1.4;
     }
 
-    /* Карточка статистики */
     .stats-card {
       background: rgba(18, 15, 38, 0.6);
       border: 1px solid rgba(0, 242, 254, 0.2);
@@ -238,7 +236,7 @@
       padding: 16px 24px;
       width: 100%;
       max-width: 290px;
-      margin-bottom: 28px;
+      margin-bottom: 20px;
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -259,23 +257,34 @@
       color: #fff;
     }
 
-    /* Кнопки */
+    /* Кнопки действия */
+    .btn-container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+      max-width: 280px;
+    }
     .btn-main {
       background: linear-gradient(135deg, #00f2fe 0%, #0066ff 100%);
       border: none;
-      padding: 16px 42px;
+      padding: 16px 20px;
       border-radius: 30px;
       color: #ffffff;
       font-weight: 800;
-      font-size: 16px;
+      font-size: 15px;
       letter-spacing: 1px;
       cursor: pointer;
       box-shadow: 0 0 25px rgba(0, 242, 254, 0.4), 0 6px 20px rgba(0, 102, 255, 0.4);
-      transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      transition: all 0.2s ease;
+      text-align: center;
     }
     .btn-main:active {
-      transform: scale(0.94);
-      box-shadow: 0 0 12px rgba(0, 242, 254, 0.4);
+      transform: scale(0.95);
+    }
+    .btn-ad {
+      background: linear-gradient(135deg, #ba55d3 0%, #ff007f 100%);
+      box-shadow: 0 0 25px rgba(186, 85, 211, 0.4);
     }
 
     @keyframes fadeIn {
@@ -318,16 +327,10 @@
       </div>
     </div>
 
-    <!-- Кнопки управления внизу экрана -->
+    <!-- Кнопки управления -->
     <div id="touchControls">
-      <button class="control-btn" id="btnLeft">
-        ◀
-        <span>ВЛЕВО</span>
-      </button>
-      <button class="control-btn" id="btnRight">
-        ▶
-        <span>ВПРАВО</span>
-      </button>
+      <button class="control-btn" id="btnLeft">◀<span>ВЛЕВО</span></button>
+      <button class="control-btn" id="btnRight">▶<span>ВПРАВО</span></button>
     </div>
 
     <!-- Overlay Screen -->
@@ -350,13 +353,18 @@
         </div>
       </div>
 
-      <button id="startBtn" class="btn-main">НАЧАТЬ</button>
+      <div class="btn-container">
+        <button id="adBtn" class="btn-main btn-ad" style="display: none;">🛡️ СПАСТИ ЯДРО (🎬 РЕКЛАМА)</button>
+        <button id="startBtn" class="btn-main">НАЧАТЬ</button>
+      </div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
   </div>
 
   <script>
+    const ADSGRAM_BLOCK_ID = "54734"; // Ваш номер блока Adsgram
+
     class SoundFX {
       constructor() {
         this.ctx = null;
@@ -486,6 +494,7 @@
     let highScore = 0;
     let shakeTime = 0;
     let shakeIntensity = 0;
+    let adUsedThisRound = false;
 
     function loadHighScore() {
       if (tg?.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9')) {
@@ -494,24 +503,14 @@
             if (!err && val) {
               highScore = parseInt(val, 10) || 0;
               document.getElementById('highScore').innerText = highScore;
-            } else {
-              fallbackLocalStorage();
-            }
+            } else fallbackLocalStorage();
           });
-        } catch (e) {
-          fallbackLocalStorage();
-        }
-      } else {
-        fallbackLocalStorage();
-      }
+        } catch (e) { fallbackLocalStorage(); }
+      } else fallbackLocalStorage();
     }
 
     function fallbackLocalStorage() {
-      try {
-        highScore = parseInt(localStorage.getItem('ap_highscore') || '0', 10);
-      } catch (e) {
-        highScore = 0;
-      }
+      try { highScore = parseInt(localStorage.getItem('ap_highscore') || '0', 10); } catch (e) { highScore = 0; }
       document.getElementById('highScore').innerText = highScore;
     }
 
@@ -519,11 +518,8 @@
       highScore = newScore;
       document.getElementById('highScore').innerText = highScore;
       if (tg?.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9')) {
-        try {
-          tg.CloudStorage.setItem('ap_highscore', newScore.toString());
-        } catch (e) {
-          try { localStorage.setItem('ap_highscore', newScore.toString()); } catch (err) {}
-        }
+        try { tg.CloudStorage.setItem('ap_highscore', newScore.toString()); } 
+        catch (e) { try { localStorage.setItem('ap_highscore', newScore.toString()); } catch (err) {} }
       } else {
         try { localStorage.setItem('ap_highscore', newScore.toString()); } catch (err) {}
       }
@@ -532,17 +528,9 @@
     loadHighScore();
 
     const player = {
-      x: 0,
-      y: 0,
-      vx: 0,
-      vy: 0,
-      radius: 16,
-      gravity: 0.38,
-      jump: -7.8,
-      sideAccel: 4.2,
-      pulse: 0,
-      hasShield: false,
-      magnetTimer: 0
+      x: 0, y: 0, vx: 0, vy: 0, radius: 16,
+      gravity: 0.38, jump: -7.8, sideAccel: 4.2,
+      pulse: 0, hasShield: false, magnetTimer: 0
     };
 
     let particles = [];
@@ -552,17 +540,10 @@
 
     class FloatingText {
       constructor(x, y, text, color) {
-        this.x = x;
-        this.y = y;
-        this.text = text;
-        this.color = color;
-        this.alpha = 1;
-        this.vy = -1.5;
+        this.x = x; this.y = y; this.text = text; this.color = color;
+        this.alpha = 1; this.vy = -1.5;
       }
-      update() {
-        this.y += this.vy;
-        this.alpha -= 0.025;
-      }
+      update() { this.y += this.vy; this.alpha -= 0.025; }
       draw() {
         ctx.save();
         ctx.globalAlpha = Math.max(0, this.alpha);
@@ -578,20 +559,14 @@
 
     class Particle {
       constructor(x, y, color, speedMult = 1, size = 3) {
-        this.x = x;
-        this.y = y;
-        this.color = color;
+        this.x = x; this.y = y; this.color = color;
         this.radius = Math.random() * size + 1;
         this.vx = (Math.random() - 0.5) * 6 * speedMult;
         this.vy = (Math.random() - 0.5) * 6 * speedMult;
         this.alpha = 1;
         this.decay = Math.random() * 0.025 + 0.015;
       }
-      update() {
-        this.x += this.vx;
-        this.y += this.vy;
-        this.alpha -= this.decay;
-      }
+      update() { this.x += this.vx; this.y += this.vy; this.alpha -= this.decay; }
       draw() {
         ctx.save();
         ctx.globalAlpha = Math.max(0, this.alpha);
@@ -615,42 +590,25 @@
         this.life = 320;
 
         const rand = Math.random();
-        if (rand < 0.55) {
-          this.type = 0;
-          this.color = '#00f2fe';
-          this.radius = 14;
-        } else if (rand < 0.80) {
-          this.type = 1;
-          this.color = '#ff2a6d';
-          this.radius = 15;
-        } else if (rand < 0.92) {
-          this.type = 2;
-          this.color = '#ffd700';
-          this.radius = 16;
-        } else {
-          this.type = 3;
-          this.color = '#ba55d3';
-          this.radius = 15;
-        }
+        if (rand < 0.55) { this.type = 0; this.color = '#00f2fe'; this.radius = 14; }
+        else if (rand < 0.80) { this.type = 1; this.color = '#ff2a6d'; this.radius = 15; }
+        else if (rand < 0.92) { this.type = 2; this.color = '#ffd700'; this.radius = 16; }
+        else { this.type = 3; this.color = '#ba55d3'; this.radius = 15; }
       }
       update() {
-        this.x += this.vx;
-        this.y += this.vy;
+        this.x += this.vx; this.y += this.vy;
         if (this.x - this.radius < 10 || this.x + this.radius > width - 10) this.vx *= -1;
         if (this.y - this.radius < 60 || this.y + this.radius > height - 160) this.vy *= -1;
 
         if (player.magnetTimer > 0 && this.type !== 1) {
-          const dx = player.x - this.x;
-          const dy = player.y - this.y;
+          const dx = player.x - this.x; const dy = player.y - this.y;
           const dist = Math.hypot(dx, dy);
           if (dist < 220) {
             this.x += (dx / dist) * 5.5;
             this.y += (dy / dist) * 5.5;
           }
         }
-
-        this.pulse += 0.06;
-        this.life--;
+        this.pulse += 0.06; this.life--;
       }
       draw() {
         const curR = this.radius + Math.sin(this.pulse) * 2;
@@ -658,18 +616,15 @@
         ctx.beginPath();
         ctx.arc(this.x, this.y, Math.max(0, curR), 0, Math.PI * 2);
         ctx.fillStyle = this.color;
-        ctx.shadowBlur = 16;
-        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 16; ctx.shadowColor = this.color;
         ctx.fill();
 
         ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.font = '10px -apple-system, sans-serif';
         if (this.type === 2) ctx.fillText('★', this.x, this.y + 1);
         else if (this.type === 3) ctx.fillText('🛡', this.x, this.y);
         else if (this.type === 1) ctx.fillText('✕', this.x, this.y);
-
         ctx.restore();
       }
     }
@@ -682,18 +637,11 @@
     function resetGame() {
       player.x = width / 2;
       player.y = height / 2 - 50;
-      player.vx = 0;
-      player.vy = 0;
-      player.hasShield = false;
-      player.magnetTimer = 0;
-      score = 0;
-      combo = 1;
-      maxCombo = 1;
-      spheresCollected = 0;
-      particles = [];
-      targets = [];
-      floatingTexts = [];
-      
+      player.vx = 0; player.vy = 0;
+      player.hasShield = false; player.magnetTimer = 0;
+      score = 0; combo = 1; maxCombo = 1; spheresCollected = 0;
+      adUsedThisRound = false;
+      particles = []; targets = []; floatingTexts = [];
       updateUI();
     }
 
@@ -715,13 +663,8 @@
       sfx.playExplode();
       triggerShake(18, 25);
 
-      if (tg?.HapticFeedback) {
-        tg.HapticFeedback.notificationOccurred('error');
-      }
-
-      if (score > highScore) {
-        saveHighScore(score);
-      }
+      if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+      if (score > highScore) saveHighScore(score);
 
       document.getElementById('title').innerText = "ЯДРО РАЗРУШЕНО";
       document.getElementById('subtitle').innerText = "Опасная энергия уничтожила импульс";
@@ -730,62 +673,66 @@
       document.getElementById('resCollected').innerText = spheresCollected;
       document.getElementById('statsCard').style.display = 'flex';
       document.getElementById('startBtn').innerText = "ИГРАТЬ СНОВА";
+      
+      // Показываем кнопку рекламы, если она ещё не использована
+      document.getElementById('adBtn').style.display = adUsedThisRound ? 'none' : 'block';
       document.getElementById('overlay').classList.remove('hidden');
     }
 
-    // Управление по направлениям (1 = влево, -1 = вправо)
+    function continueAfterAd() {
+      adUsedThisRound = true;
+      player.x = width / 2;
+      player.y = height / 2 - 50;
+      player.vx = 0; player.vy = -4;
+      player.hasShield = true;
+      isPlaying = true;
+      updateUI();
+      document.getElementById('overlay').classList.add('hidden');
+    }
+
+    // Вызов рекламы Adsgram
+    document.getElementById('adBtn').addEventListener('click', () => {
+      sfx.init();
+      if (window.Adsgram) {
+        const adController = window.Adsgram.init({ blockId: ADSGRAM_BLOCK_ID });
+        adController.show().then((result) => {
+          continueAfterAd();
+        }).catch((err) => {
+          alert('Реклама недоступна или была закрыта досрочно.');
+        });
+      } else {
+        alert('Рекламный блок загружается...');
+      }
+    });
+
     function movePlayer(direction) {
       if (!isPlaying) return;
-
       sfx.playJump();
-      
       player.vy = player.jump;
       player.vx = direction * player.sideAccel;
 
-      if (tg?.HapticFeedback) {
-        tg.HapticFeedback.impactOccurred('light');
-      }
+      if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
 
       for (let i = 0; i < 6; i++) {
         particles.push(new Particle(player.x, player.y + player.radius, '#00f2fe', 0.6, 2.5));
       }
     }
 
-    // Кнопки управления (исправлено: левая кнопка двигает влево, правая — вправо)
     document.getElementById('btnLeft').addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      sfx.init();
-      movePlayer(1); // Влево
+      e.preventDefault(); sfx.init(); movePlayer(1);
     }, { passive: false });
 
     document.getElementById('btnRight').addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      sfx.init();
-      movePlayer(-1); // Вправо
+      e.preventDefault(); sfx.init(); movePlayer(-1);
     }, { passive: false });
 
-    document.getElementById('btnLeft').addEventListener('click', () => {
-      sfx.init();
-      movePlayer(1);
-    });
+    document.getElementById('btnLeft').addEventListener('click', () => { sfx.init(); movePlayer(1); });
+    document.getElementById('btnRight').addEventListener('click', () => { sfx.init(); movePlayer(-1); });
 
-    document.getElementById('btnRight').addEventListener('click', () => {
-      sfx.init();
-      movePlayer(-1);
-    });
-
-    // Клавиатура для тестирования на ПК
     window.addEventListener('keydown', (e) => {
-      if (e.code === 'Space' || e.code === 'ArrowUp') {
-        sfx.init();
-        movePlayer(Math.random() > 0.5 ? 1 : -1);
-      } else if (e.code === 'ArrowLeft') {
-        sfx.init();
-        movePlayer(1);
-      } else if (e.code === 'ArrowRight') {
-        sfx.init();
-        movePlayer(-1);
-      }
+      if (e.code === 'Space' || e.code === 'ArrowUp') { sfx.init(); movePlayer(Math.random() > 0.5 ? 1 : -1); }
+      else if (e.code === 'ArrowLeft') { sfx.init(); movePlayer(1); }
+      else if (e.code === 'ArrowRight') { sfx.init(); movePlayer(-1); }
     });
 
     document.getElementById('soundBtn').addEventListener('click', () => {
@@ -802,7 +749,6 @@
 
     function loop() {
       ctx.save();
-
       if (shakeTime > 0) {
         const dx = (Math.random() - 0.5) * shakeIntensity;
         const dy = (Math.random() - 0.5) * shakeIntensity;
@@ -827,14 +773,8 @@
 
         particles.push(new Particle(player.x, player.y, player.hasShield ? '#ba55d3' : '#4facfe', 0.25, 2));
 
-        if (player.x - player.radius < 0) {
-          player.x = player.radius;
-          player.vx *= -0.6;
-        }
-        if (player.x + player.radius > width) {
-          player.x = width - player.radius;
-          player.vx *= -0.6;
-        }
+        if (player.x - player.radius < 0) { player.x = player.radius; player.vx *= -0.6; }
+        if (player.x + player.radius > width) { player.x = width - player.radius; player.vx *= -0.6; }
 
         if (player.y + player.radius > height - 120 || player.y - player.radius < 0) {
           if (player.hasShield) {
@@ -852,19 +792,15 @@
         }
 
         spawnTimer++;
-        if (spawnTimer % 38 === 0) {
-          if (targets.length < 12) {
-            targets.push(new Target());
-          }
+        if (spawnTimer % 38 === 0 && targets.length < 12) {
+          targets.push(new Target());
         }
 
         for (let i = targets.length - 1; i >= 0; i--) {
           const t = targets[i];
-          t.update();
-          t.draw();
+          t.update(); t.draw();
 
-          const dx = player.x - t.x;
-          const dy = player.y - t.y;
+          const dx = player.x - t.x; const dy = player.y - t.y;
           const dist = Math.hypot(dx, dy);
 
           if (dist < player.radius + t.radius) {
@@ -883,8 +819,7 @@
               }
             } else {
               spheresCollected++;
-              let addedScore = 10;
-              let txtColor = '#00f2fe';
+              let addedScore = 10; let txtColor = '#00f2fe';
 
               if (t.type === 0) {
                 sfx.playCollectCyan();
@@ -893,16 +828,13 @@
               } else if (t.type === 2) {
                 sfx.playCollectGold();
                 createExplosion(t.x, t.y, '#ffd700', 25);
-                addedScore = 50;
-                player.magnetTimer = 300;
-                combo += 2;
+                addedScore = 50; player.magnetTimer = 300; combo += 2;
                 txtColor = '#ffd700';
                 floatingTexts.push(new FloatingText(t.x, t.y - 15, '🧲 МАГНИТ!', '#ffd700'));
               } else if (t.type === 3) {
                 sfx.playShield();
                 createExplosion(t.x, t.y, '#ba55d3', 25);
-                player.hasShield = true;
-                combo++;
+                player.hasShield = true; combo++;
                 txtColor = '#ba55d3';
                 floatingTexts.push(new FloatingText(t.x, t.y - 15, '🛡️ ЩИТ!', '#ba55d3'));
               }
@@ -912,10 +844,7 @@
               score += totalGain;
 
               floatingTexts.push(new FloatingText(t.x, t.y, `+${totalGain}`, txtColor));
-
-              if (tg?.HapticFeedback) {
-                tg.HapticFeedback.impactOccurred(t.type === 2 ? 'medium' : 'light');
-              }
+              if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred(t.type === 2 ? 'medium' : 'light');
 
               targets.splice(i, 1);
               updateUI();
@@ -923,23 +852,17 @@
             continue;
           }
 
-          if (t.life <= 0) {
-            targets.splice(i, 1);
-          }
+          if (t.life <= 0) targets.splice(i, 1);
         }
       }
 
       for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.update();
-        p.draw();
+        const p = particles[i]; p.update(); p.draw();
         if (p.alpha <= 0) particles.splice(i, 1);
       }
 
       for (let i = floatingTexts.length - 1; i >= 0; i--) {
-        const ft = floatingTexts[i];
-        ft.update();
-        ft.draw();
+        const ft = floatingTexts[i]; ft.update(); ft.draw();
         if (ft.alpha <= 0) floatingTexts.splice(i, 1);
       }
 
@@ -962,7 +885,6 @@
           ctx.shadowColor = '#ba55d3';
           ctx.stroke();
         }
-
         ctx.restore();
       }
 
